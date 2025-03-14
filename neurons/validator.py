@@ -12,6 +12,7 @@ from substrateinterface import SubstrateInterface
 import requests
 from dotenv import load_dotenv
 from bittensor.core.chain_data.utils import decode_metadata
+import hashlib
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(BASE_DIR)
@@ -173,10 +174,23 @@ def decrypt_submissions(current_commitments: dict, headers: dict = {"Range": "by
             response = requests.get(full_url, headers=headers)
             if response.status_code in [200, 206]:
                 encrypted_content = response.content
+                content_hash = hashlib.sha256(encrypted_content.encode(utf-8)).hexdigest()[:20]
+
+                # Disregard any submissions that don't match the expected filename
+                if not full_url.endswith(f'/{content_hash}.txt'):
+                    bt.logging.error(f"Filename for {commit.uid} is not compatible with expected content hash")
+                    continue
                 encrypted_content = encrypted_content.decode('utf-8', errors='replace')
-                encrypted_content = literal_eval(encrypted_content)
-                if type(encrypted_content) != tuple:
-                    bt.logging.error(f"Encrypted content for {commit.uid} is not a tuple: {encrypted_content}")
+
+                # Disregard any submissions that don't contain a tuple, are not of length 2, or are not valid tuples
+                if encrypted_content.startswith('(') and encrypted_content.endswith(')'):
+                    try:
+                        encrypted_content = literal_eval(encrypted_content)
+                    except ValueError as e:
+                        bt.logging.error(f"Encrypted content for {commit.uid} is not a tuple.")
+                        continue
+                if len(encrypted_content) != 2:
+                    bt.logging.error(f"Encrypted content for {commit.uid} does not have expected number of elements.")
                     continue
                 encrypted_submissions[commit.uid] = (encrypted_content[0], encrypted_content[1])
             else:
