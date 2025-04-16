@@ -3,6 +3,7 @@ import argparse
 import bittensor as bt
 import os
 from dotenv import load_dotenv
+import time
 
 def main():
     load_dotenv()
@@ -53,16 +54,30 @@ def main():
     # Set the single weight
     weights[args.target_uid] = 1.0
 
-    # 3) Send the weights to the chain
-    print(f"Setting weight=1 on UID={args.target_uid} (netuid={NETUID}), 0 on others.")
-    result = subtensor.set_weights(
-        netuid=NETUID,
-        wallet=wallet,
-        uids=metagraph.uids,
-        weights=weights,
-        wait_for_inclusion=True
-    )
-    print(f"Result from set_weights: {result}")
+    # 3) Send the weights to the chain with retry logic
+    max_retries = 20
+    delay_between_retries = 12  # seconds
+    for attempt in range(max_retries):
+        try:
+            print(f"Attempt {attempt + 1} to set weights.")
+            result = subtensor.set_weights(
+                netuid=NETUID,
+                wallet=wallet,
+                uids=metagraph.uids,
+                weights=weights,
+                wait_for_inclusion=True
+            )
+            print(f"Result from set_weights: {result}")
+            break  # Exit loop if successful
+        except Exception as e:
+            print(f"Error setting weights: {e}")
+            if attempt < max_retries - 1:
+                print(f"Retrying in {delay_between_retries} seconds...")
+                time.sleep(delay_between_retries)
+            else:
+                print("Failed to set weights after multiple attempts. Exiting.")
+                sys.exit(1)
+
     print("Done.")
 
 if __name__ == "__main__":
